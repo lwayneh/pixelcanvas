@@ -31,6 +31,9 @@ type Canvasp struct {
 	copybuff js.Value
 }
 
+// RenderFunc passes canvas drawing calls to/from go
+type RenderFunc func(gc *pixelgl.Canvas) bool
+
 // NewCanvasp Creates a new Canvasp
 func NewCanvasp(create bool) (*Canvasp, error) {
 
@@ -77,9 +80,9 @@ func (c *Canvasp) Set(canvas js.Value, width int, height int) {
 }
 
 // Start starts the annimationFrame callbacks running.
-func (c *Canvasp) Start(maxFPS float64) {
+func (c *Canvasp) Start(maxFPS float64, rf RenderFunc) {
 	c.SetFPS(maxFPS)
-	c.initFrameUpdate()
+	c.initFrameUpdate(rf)
 }
 
 // Stop needs to be called on an 'beforeUnload' trigger,
@@ -108,7 +111,7 @@ func (c *Canvasp) Width() int {
 }
 
 // initFrameUpdate copies the image over to the browser
-func (c *Canvasp) initFrameUpdate() {
+func (c *Canvasp) initFrameUpdate(rf RenderFunc) {
 	// Hold the callbacks without blocking
 	go func() {
 		var renderFrame js.Func
@@ -118,7 +121,15 @@ func (c *Canvasp) initFrameUpdate() {
 
 			timestamp := args[0].Float()
 			if timestamp-lastTimestamp >= c.timeStep { // Constrain FPS
-				c.imgCopy()
+
+				if rf != nil { // If required, call the requested render function, before copying the frame
+					if rf(c.image) { // Only copy the image back if RenderFunction returns TRUE. (i.e. stuff has changed.)
+						c.imgCopy()
+					}
+				} else { // Just do the copy, rendering must be being done elsewhere
+					c.imgCopy()
+				}
+
 				lastTimestamp = timestamp
 			}
 
